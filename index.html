@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>星空印记测试</title>
+  <!-- Brython -->
+  <script src="https://cdn.jsdelivr.net/npm/brython@3.11/brython.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/brython@3.11/brython_stdlib.min.js"></script>
+  <style>
+    :root{
+      --grad-start:#0b0b2b;
+      --grad-end:#1a1a40;
+      --glass:rgba(255,255,255,0.08);
+      --highlight:#58a6ff;
+      --text:#e0e0e0;
+    }
+    html,body{height:100%;margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;background:linear-gradient(135deg,var(--grad-start),var(--grad-end));color:var(--text);text-align:center;display:flex;align-items:center;justify-content:center;}
+    .glass-card{background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.1);border-radius:16px;padding:2.5rem 3rem;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.37);}
+    h1{font-size:1.8rem;margin-bottom:2rem;letter-spacing:1px;}
+    .input-group{display:flex;flex-direction:column;gap:1rem;margin-bottom:1.5rem;}
+    input{ padding:0.75rem 1rem;border-radius:8px;border:none;background:rgba(255,255,255,0.1);color:var(--text);font-size:1rem;}
+    input::placeholder{color:rgba(255,255,255,0.5);}
+    button{padding:0.75rem 1.5rem;border-radius:8px;border:none;background:var(--highlight);color:#fff;font-size:1rem;cursor:pointer;transition:background 0.2s;}
+    button:hover{background:#4896e6;}
+    .opt{margin:0.5rem 0;padding:0.75rem 1rem;border-radius:8px;background:rgba(255,255,255,0.07);cursor:pointer;transition:background 0.2s;}
+    .opt:hover{background:rgba(255,255,255,0.15);}
+    #res{font-size:1.5rem;margin-top:1rem;}#season{margin-top:0.5rem;color:#ffa;}
+    .hidden{display:none;}
+    /* .glass-card{
+        min-height: 320px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    } */
+    #restartBtn{
+        margin-top: 2.5rem;
+    }
+  </style>
+</head>
+<body onload="brython()">
+  <!-- ① 输入页 -->
+  <div id="input-page" class="glass-card">
+    <h1>星空印记测试</h1>
+    <div class="input-group">
+      <input id="name-in" type="text" placeholder="你的昵称">
+      <input id="month-in" type="number" min="1" max="12" placeholder="出生月份（1-12）">
+    </div>
+    <button id="startBtn">开始测试</button>
+  </div>
+
+  <!-- ② 答题页 -->
+  <div id="quiz-page" class="glass-card hidden">
+    <h1 id="q-title"></h1>
+    <div id="q-box"></div>
+  </div>
+
+  <!-- ③ 结果页 -->
+  <!-- ③ 结果页 -->
+<div id="result-page" class="glass-card hidden">
+  <h1>测试结果</h1>
+  
+  <!-- 【新增】自适应图片容器 -->
+  <div id="result-img-container" style="
+    width: 100%;
+    max-height: 280px;
+    margin: 1.5rem 0;
+    border-radius: 12px;
+    overflow: hidden;
+    background: linear-gradient(135deg, rgba(0,0,0,0.4), rgba(20,20,60,0.3));
+    border: 1px solid rgba(255,255,255,0.1);
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  ">
+    <!-- 加载占位符 -->
+    <div id="img-placeholder" style="
+      position: absolute;
+      color: rgba(255,255,255,0.3);
+      font-size: 0.9rem;
+      pointer-events: none;
+    ">✨ 星图加载中...</div>
+    
+    <!-- 实际图片 -->
+    <img id="result-img" src="" style="
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      display: none;
+      transition: opacity 0.5s ease;
+    " alt="星团图像" onload="this.style.display='block'; this.style.opacity='1'; document.getElementById('img-placeholder').style.display='none';">
+  </div>
+  
+  <div id="res"></div>
+  <div id="desc"></div>
+  <div id="season"></div>
+  <button id="restartBtn">再测一次</button>
+</div>
+
+<script type="text/python">
+from browser import document, window
+
+# ====== 数据 ======
+celestial_fp = {
+    "昴宿星团":     {"season": "秋", "fp": ['F', 'C', 'W', 'E', 'A', 'S']},
+    "蜂巢星团":     {"season": "春", "fp": ['W', 'C', 'S', 'F', 'E', 'A']},
+    "毕宿星团":     {"season": "秋", "fp": ['E', 'C', 'W', 'F', 'S', 'A']},
+    "双星团":      {"season": "春", "fp": ['A', 'S', 'C', 'F', 'W', 'E']},
+    "猎户座大星云":  {"season": "冬", "fp": ['F', 'C', 'W', 'A', 'E', 'S']},
+    "礁湖星云":    {"season": "夏", "fp": ['W', 'F', 'C', 'A', 'E', 'S']},
+    "北美洲星云":  {"season": "夏", "fp": ['E', 'C', 'W', 'F', 'S', 'A']},
+    "面纱星云":    {"season": "夏", "fp": ['W', 'A', 'S', 'C', 'F', 'E']},
+    "哑铃星云":    {"season": "夏", "fp": ['A', 'S', 'W', 'F', 'C', 'E']},
+    "环状星云":    {"season": "冬", "fp": ['S', 'E', 'W', 'C', 'F', 'A']},
+    "武仙座球状星团": {"season": "春", "fp": ['C', 'E', 'W', 'F', 'S', 'A']},
+    "奥米伽星团":  {"season": "春", "fp": ['C', 'W', 'F', 'S', 'E', 'A']},
+}
+
+# 【新增】星体描述字典（已修复引号冲突）
+celestial_desc = {
+    '昴宿星团': {
+        'trait': '炽热纯粹 · 群体辉映',
+        'img': 'images/pleiades.jpg',
+        'desc': '你与昴宿星团（M45，七姐妹星团）遥相呼应——这是夜空中最明亮的蓝色年轻疏散星团，位于金牛座。如同燃烧的青春之火，你的性格里有着不遮掩的热烈与纯粹，像这些蓝色巨星一样，在人群中自然成为焦点。你天生适合待在人堆里发光，但内心又保持着一份不愿被同化的骄傲。传说中七姐妹彼此映照，你也拥有在亲密关系中保持自我光芒的能力，既享受集体的温暖，又散发着不可直视却令人向往的光热。'
+    },
+    '蜂巢星团': {
+        'trait': '温柔暗涌 · 潮汐万有',
+        'img': 'images/beehive.jpg',
+        'desc': '你归属于蜂巢星团（M44，鬼宿星团），一个藏匿于巨蟹座的古老疏散星团。你的能量像水一样流动包容，表面温和亲切，如同星团中相互依偎的恒星，但内心保持着深邃的神秘感与独属于自己的边界。你善于营造"家"的氛围，让身边人感到被接纳，但你的情绪也像潮汐般有自己的节律。历史记载它曾被称作"马槽"，你同样拥有孕育与庇护他人的天性，在给予温暖的同时，也保留着属于自己的那一片深海。'
+    },
+    '毕宿星团': {
+        'trait': '大地恒久 · 包容守护',
+        'img': 'images/hyades.jpg',
+        'desc': '你的印记指向毕宿星团（Hyades，Melotte 25）——金牛座中那标志性的V形疏散星团，与毕宿五共同构成金牛的头部。这是最接近地球的恒星集团之一（无梅西耶编号，但亮于大多数梅西耶天体），如同大地般触手可及的真实。你给人最深刻的印象是稳定与可靠，像这些橙色巨星一样散发着持久的温暖。你重视承诺与安全感，在变化的世界中扮演"锚点"的角色。V字形的结构暗示着你独特的包容性，你能够同时容纳不同的立场，像大地承载山川河流，给予他人坚实而不压迫的支撑。'
+    },
+    '双星团': {
+        'trait': '双重织锦 · 瞬息万变',
+        'img': 'images/double_cluster.jpg',
+        'desc': '你与英仙座的双星团（NGC 869与NGC 884）产生共振——这是两个交织在一起的独立疏散星团，相距仅数百光年却又各自完整（通常合称Caldwell 14）。这完美诠释了你复杂而迷人的性格：你既渴望深刻的联结，又时刻想要保留独立的自我空间。你的思维飘忽灵动，像风一样瞬息万变，能够在不同角色间优雅切换，给他人带来"熟悉的陌生人"般的神秘感。就像这两个星团在望远镜中呈现出的金银双色，你的性格也闪耀着层次丰富的光芒。'
+    },
+    '猎户座大星云': {
+        'trait': '创造不息 · 孕育新生',
+        'img': 'images/orion.jpg',
+        'desc': '你的灵魂印记是猎户座大星云（M42，NGC 1976）——夜空中最壮丽的恒星育婴室，位于猎户座腰带下方，距离地球约1300光年。这里是新恒星诞生的摇篮，正如你体内源源不断的生命力和创造欲。你不仅仅是梦想家，更是能将混沌转化为秩序的造物主。你关心身边人的未来，愿意成为照亮他人的光源。你的热情具有感染力，像星云中炽热的年轻恒星一样，总能点燃周围人的激情。记住，你拥有将无形想象变为有形现实的天生能力。'
+    },
+    '礁湖星云': {
+        'trait': '深邃神秘 · 潜藏炽烈',
+        'img': 'images/lagoon.jpg',
+        'desc': '你与礁湖星云（M8，NGC 6523）相连——位于人马座的巨大发射星云，一片看似平静却内在翻滚着炽热风暴的宇宙之海。你的性格如同这片星云：外在冷静而深邃，像水一样让人猜不透，内心却燃烧着强烈的激情。你可能给人一种若即若离的神秘感，就像星云中心被尘埃带遮挡的发光核心。但一旦你决定敞开，那种融合了理性深度与感性热烈的独特魅力，会像星云中的"创造之柱"一样，给人留下不可磨灭的印象。'
+    },
+    '北美洲星云': {
+        'trait': '广阔包容 · 大陆轮廓',
+        'img': 'images/northamerica.jpg',
+        'desc': '你的星空印记是北美洲星云（NGC 7000，Caldwell 20），位于天鹅座的一片巨大电离氢区，因形状酷似北美大陆而得名。这映射出你如大地般广阔的包容心——你能够承载不同的观点、接纳多样的灵魂，就像大陆承载不同的生态。你的存在感是宏大而稳定的，不张扬却令人安心。那条分隔"墨西哥湾"的暗带（暗星云L935），象征着你清晰但温和的边界感：你包容，但不失原则。你适合成为群体中的"大陆"，给予他人探索世界的坚实基地。'
+    },
+    '面纱星云': {
+        'trait': '历经蜕变 · 通透飘逸',
+        'img': 'images/veil.jpg',
+        'desc': '你归属于面纱星云（NGC 6960/6992，Caldwell 33/34）——约8000年前一颗巨星爆炸后留下的超新星遗迹，位于天鹅座，如丝绸般飘逸的丝状气体绵延数光年。这揭示了你灵魂深处的特质：你可能经历过重大的转变或顿悟，从中获得了超越常人的通透感。你像这些电离的气体丝一样，轻盈、优雅、难以捉摸。你身上同时具备了随遇而安和飘忽灵动的特质，拥有极强的适应能力，不再执着于固定的形态，而是在流动中保持本真。你的存在提醒着他人：毁灭之后，可以是更辽阔的美。'
+    },
+    '哑铃星云': {
+        'trait': '完美闭环 · 独立自洽',
+        'img': 'images/dumbbell.jpg',
+        'desc': '你的印记指向哑铃星云（M27，NGC 6853），位于狐狸座，是第一个被人类发现的行星状星云，形如哑铃或苹果核。这象征着你独特的完整性：你像是已经经历了恒星演化的成熟期，形成了自洽的价值观闭环，不需要外界过多的认可。你的思维具有辩证的双重性，既灵动又独立，能够在矛盾中看到统一。就像这个星云中心的白矮星被发光气体壳层包裹，你内心强大而独立，却对外散发着柔和而独特的光芒。你享受独处，因为你的内心世界本身就足够丰盈完整。'
+    },
+    '环状星云': {
+        'trait': '孤独完美 · 闭环永恒',
+        'img': 'images/ring.jpg',
+        'desc': '你与著名的环状星云（M57，NGC 6720）相连——天琴座中那个如同宇宙戒指般的蓝色光环，一颗恒星温柔谢幕后的杰作。这映射出你追求完美的性格：你对自己的要求极高，像这个完美的气体环一样，追求形式与内在的统一。你可能显得有些疏离，那是因为你在维护自己的"事件视界"。但在这孤独的闭环之内，是稳定而炽热的主心骨能量。你的存在本身就是一种完整的艺术，提醒着世界：孤独可以成为一种精致的美。'
+    },
+    '武仙座球状星团': {
+        'trait': '万星聚集 · 古老团结',
+        'img': 'images/m13.jpg',
+        'desc': '你的灵魂对应武仙座球状星团（M13，NGC 6205）——北半球最壮观的球状星团，包含约30万颗恒星，像一座来自宇宙早期的古老城邦。这体现了你强烈的归属感与历史感：你相信群体的力量，善于将分散的个体凝聚成有力的整体。你是天生的组织者或社群核心，像这个星团的引力一样，自然地将人们聚集在一起。1974年阿雷西博望远镜曾向它发送人类信息（阿雷西博信号），你也拥有向宇宙宣告理念、连接远方心灵的沟通能力。'
+    },
+    '奥米伽星团': {
+        'trait': '宏大包容 · 深海聚光',
+        'img': 'images/omega.jpg',
+        'desc': '你归属于奥米伽星团（NGC 5139，Omega Centauri）——银河系中最大、最明亮的球状星团，位于半人马座，包含约1000万颗恒星，几乎是唯一肉眼可见的裸眼球状星团（视星等3.7等）。这象征着你宏大而深邃的包容力：你的心量极大，能够容纳各种不同、甚至矛盾的事物共存。就像这个星团可能是一个被银河系吞并的古老星系核心，你拥有将"异类"整合为己用的智慧。你的存在感如深海般静谧却强大，是群体中不动声色却不可或缺的引力中心。'
+    }
+}
+
+question_map = {
+    "Q1": {"text": "你的能量核心更像？", "opts": ["A. 像年轻火焰，炽热而纯粹", "B. 像深海暗流，神秘且冷静", "C. 像大地山川，包容而恒久", "D. 像风暴闪电，瞬息万变"], "score": {'A': {'F': 3}, 'B': {'W': 3}, 'C': {'E': 3}, 'D': {'A': 3}}},
+    "Q2": {"text": "在世界中，你的存在方式？", "opts": ["A. 群星相拥，彼此映照", "B. 独自完美，闭环自洽", "C. 双重交织，复杂多面", "D. 孕育新生，创造不止"], "score": {'A': {'C': 3}, 'B': {'S': 3}, 'C': {'A': 3}, 'D': {'F': 3}}},
+    "Q3": {"text": "你对时间的感知？", "opts": ["A. 瞬间爆发，划过即逝", "B. 恒久稳定，亘古不变", "C. 循环往复，周而复始", "D. 宏大轮廓，浩瀚无垠"], "score": {'A': {'A': 3}, 'B': {'E': 3}, 'C': {'A': 3}, 'D': {'C': 3}}},
+}
+
+def get_season(m):
+    if 3 <= m <= 5: return "春"
+    if 6 <= m <= 8: return "夏"
+    if 9 <= m <= 11: return "秋"
+    return "冬"
+
+def calc_result(month, answers):
+    dim_score = {'F': 0, 'W': 0, 'E': 0, 'A': 0, 'C': 0, 'S': 0}
+    for i, ans in enumerate(answers):
+        for d, v in question_map[f"Q{i+1}"]["score"][ans].items():
+            dim_score[d] += v
+    user_fp = sorted(dim_score, key=dim_score.get, reverse=True)
+    raw_dist = {name: sum(abs(pos - user_fp.index(dim)) for pos, dim in enumerate(data["fp"]))
+               for name, data in celestial_fp.items()}
+    season = get_season(month)
+    final_dist = {name: d * 0.7 if celestial_fp[name]["season"] == season else d
+                 for name, d in raw_dist.items()}
+    result = min(final_dist.keys(), key=lambda name: final_dist[name])
+    return result, celestial_fp[result]["season"] == season, final_dist
+
+# ====== 交互 ======
+def start():
+    document["input-page"].classList.remove("hidden")
+    document["quiz-page"].classList.add("hidden")
+    document["result-page"].classList.add("hidden")
+
+def show_quiz(ev=None):
+    name = document["name-in"].value.strip()
+    month = int(document["month-in"].value)
+    if not name or not (1 <= month <= 12):
+        window.alert("请输入昵称和 1-12 的月份！")
+        return
+    window.userName = name
+    window.userMonth = month
+    document["input-page"].classList.add("hidden")
+    document["quiz-page"].classList.remove("hidden")
+    show_question(0)
+
+def show_question(idx):
+    q = question_map[f"Q{idx+1}"]
+    document["q-title"].textContent = q["text"]
+    document["q-box"].clear()
+    for opt in q["opts"]:
+        btn = document.createElement("div")
+        btn.className = "opt"
+        btn.textContent = opt
+        btn.bind("click", lambda ev, ans=opt[0]: select_answer(ans))
+        document["q-box"] <= btn
+
+current_q = 0           # 先定义
+window.answers = []     # 先定义
+
+def select_answer(ans):
+    # 修复：用 JS 原生方式存数组
+    if not hasattr(window, 'answers'):
+        window.answers = []
+    window.answers.append(ans)
+    global current_q
+    current_q += 1
+    if current_q < 3:
+        show_question(current_q)
+    else:
+        show_result()
+
+def show_result():
+    month = window.userMonth
+    answers = window.answers
+    result, is_season, dist = calc_result(month, answers)
+    document["quiz-page"].classList.add("hidden")
+    document["result-page"].classList.remove("hidden")
+
+    # 【修改】显示结果标题和描述
+    document["res"].textContent = f"{window.userName} 的星空印记：{result}"
+    
+    # 【新增】获取并显示描述
+    info = celestial_desc.get(result, {})
+    trait = info.get("trait", "")
+    desc = info.get("desc", "")
+    
+    desc_html = f"""
+        <div style="font-size:0.85rem;color:#58a6ff;margin-bottom:0.5rem;letter-spacing:2px;text-align:center;">{trait}</div>
+        <div style="text-indent:2em;">{desc}</div>
+    """
+    document["desc"].innerHTML = desc_html
+
+
+    # 【新增】显示图片（带错误处理）
+    img_path = info.get("img", "")
+    img_elem = document["result-img"]
+    placeholder = document["img-placeholder"]
+    
+    if img_path:
+        placeholder.style.display = "block"
+        img_elem.style.display = "none"
+        img_elem.style.opacity = "0"
+        img_elem.src = img_path
+        
+        # 绑定错误处理（如果图片加载失败）
+        def on_error(ev):
+            placeholder.textContent = "🌌 星图暂时不可用"
+            img_elem.style.display = "none"
+        
+        img_elem.bind("error", on_error)
+    else:
+        placeholder.textContent = "🌌 暂无星图"
+
+
+    if is_season:
+        season_map = {"春": "3-5月", "夏": "6-8月", "秋": "9-11月", "冬": "12-2月"}
+        s = get_season(month)
+        document["season"].innerHTML = f'🌟 你诞生的{s}季（{season_map[s]}）恰好是「{result}」在夜空最明亮的时候——仿佛宇宙在你生日时，就为你准备好了这份当季专属的礼物！'
+    else:
+        document["season"].textContent = ""
+
+def restart(ev=None):
+
+    global current_q      # 【新增】声明全局变量
+    current_q = 0         # 【新增】重置题号计数器
+    
+    window.answers = []
+    document["name-in"].value = ""
+    document["month-in"].value = ""
+
+    # 【新增】重置图片容器
+    img_elem = document["result-img"]
+    img_elem.src = ""
+    img_elem.style.display = "none"
+    img_elem.style.opacity = "0"
+    document["img-placeholder"].style.display = "block"
+    document["img-placeholder"].textContent = "✨ 星图加载中..."
+
+    start()
+
+# 绑定按钮
+document["startBtn"].bind("click", show_quiz)
+document["restartBtn"].bind("click", restart)
+
+# 启动
+start()
+</script>
+</body>
+</html>
